@@ -47,22 +47,50 @@ pub fn is_valid_base32(input: &[u8]) -> bool {
     decoded_len(input.len()).is_some() && input.iter().all(|b| CHARS.contains(b))
 }
 
+/// Encode `input` byte sequence using BASE32 encoding and write the resulting byte sequence to
+/// `output`.
 pub fn encode<O: Write + ?Sized>(input: &[u8], output: &mut O) {
+    macro_rules! byte {
+        (0, $a: ident) => {
+            CHARS[($a >> 3) as usize]
+        };
+        (1, $a: ident, $b: ident) => {
+            CHARS[((($a & 0b111) << 2) | ($b >> 6)) as usize]
+        };
+        (2, $b: ident) => {
+            CHARS[(($b >> 1) & 0b11111) as usize]
+        };
+        (3, $b: ident, $c: ident) => {
+            CHARS[((($b & 0b1) << 4) | ($c >> 4)) as usize]
+        };
+        (4, $c: ident, $d: ident) => {
+            CHARS[((($c & 0b1111) << 1) | ($d >> 7)) as usize]
+        };
+        (5, $d: ident) => {
+            CHARS[(($d >> 2) & 0b11111) as usize]
+        };
+        (6, $d: ident, $e: ident) => {
+            CHARS[((($d & 0b11) << 3) | ($e >> 5)) as usize]
+        };
+        (7, $e: ident) => {
+            CHARS[($e & 0b11111) as usize]
+        };
+    }
     let mut chunks = input.chunks_exact(5);
-    while let Some(chunk) = chunks.next() {
+    for chunk in chunks.by_ref() {
         let a = chunk[0];
         let b = chunk[1];
         let c = chunk[2];
         let d = chunk[3];
         let e = chunk[4];
-        output.push(CHARS[(a & 0b11111) as usize]); // 5 bits
-        output.push(CHARS[((a >> 5) | ((b & 0b11) << 3)) as usize]); // 3 + 2 bits
-        output.push(CHARS[((b >> 2) & 0b11111) as usize]); // 5 bits
-        output.push(CHARS[((b >> 7) | ((c & 0b1111) << 1)) as usize]); // 1 + 4 bits
-        output.push(CHARS[((c >> 4) | ((d & 0b1) << 4)) as usize]); // 4 + 1 bits
-        output.push(CHARS[((d >> 1) & 0b11111) as usize]); // 5 bits
-        output.push(CHARS[((d >> 6) | ((e & 0b111) << 2)) as usize]); // 2 + 3 bits
-        output.push(CHARS[(e >> 3) as usize]); // 5 bits
+        output.push(byte!(0, a)); // 5 bits
+        output.push(byte!(1, a, b)); // 3 + 2 bits
+        output.push(byte!(2, b)); // 5 bits
+        output.push(byte!(3, b, c)); // 1 + 4 bits
+        output.push(byte!(4, c, d)); // 4 + 1 bits
+        output.push(byte!(5, d)); // 5 bits
+        output.push(byte!(6, d, e)); // 2 + 3 bits
+        output.push(byte!(7, e)); // 5 bits
     }
     let remainder = chunks.remainder();
     let remaining = remainder.len();
@@ -70,29 +98,48 @@ pub fn encode<O: Write + ?Sized>(input: &[u8], output: &mut O) {
         return;
     }
     let a = remainder[0];
-    output.push(CHARS[(a & 0b11111) as usize]); // 5 bits
+    output.push(byte!(0, a)); // 5 bits
     let b = remainder.get(1).copied().unwrap_or(0);
-    output.push(CHARS[((a >> 5) | ((b & 0b11) << 3)) as usize]); // 3 + 2 bits
+    output.push(byte!(1, a, b)); // 3 + 2 bits
     if remaining == 1 {
         return;
     }
     let c = remainder.get(2).copied().unwrap_or(0);
-    output.push(CHARS[((b >> 2) & 0b11111) as usize]); // 5 bits
-    output.push(CHARS[((b >> 7) | ((c & 0b1111) << 1)) as usize]); // 1 + 4 bits
+    output.push(byte!(2, b)); // 5 bits
+    output.push(byte!(3, b, c)); // 1 + 4 bits
     if remaining == 2 {
         return;
     }
     let d = remainder.get(3).copied().unwrap_or(0);
-    output.push(CHARS[((c >> 4) | ((d & 0b1) << 4)) as usize]); // 4 + 1 bits
+    output.push(byte!(4, c, d)); // 4 + 1 bits
     if remaining == 3 {
         return;
     }
     let e = remainder.get(4).copied().unwrap_or(0);
-    output.push(CHARS[((d >> 1) & 0b11111) as usize]); // 5 bits
-    output.push(CHARS[((d >> 6) | ((e & 0b111) << 2)) as usize]); // 2 + 3 bits
+    output.push(byte!(5, d)); // 5 bits
+    output.push(byte!(6, d, e)); // 2 + 3 bits
 }
 
+/// Decode `input` byte sequence using BASE32 encoding and write the resulting byte sequence to
+/// `output`.
 pub fn decode<O: Write + ?Sized>(input: &[u8], output: &mut O) -> Result<(), DecodeError> {
+    macro_rules! byte {
+        (0, $a: ident, $b: ident) => {
+            ($a << 3) | (($b >> 2) & 0b111)
+        };
+        (1, $b: ident, $c: ident, $d: ident) => {
+            (($b & 0b11) << 6) | ($c << 1) | ($d >> 4)
+        };
+        (2, $d: ident, $e: ident) => {
+            (($d & 0b1111) << 4) | ($e >> 1)
+        };
+        (3, $e: ident, $f: ident, $g: ident) => {
+            (($e & 0b1) << 7) | ($f << 2) | ($g >> 3)
+        };
+        (4, $g: ident, $h: ident) => {
+            (($g & 0b111) << 5) | $h
+        };
+    }
     let input_len = input.len();
     if decoded_len(input_len).is_none() {
         return Err(DecodeError::InvalidLen);
@@ -101,7 +148,7 @@ pub fn decode<O: Write + ?Sized>(input: &[u8], output: &mut O) -> Result<(), Dec
         return Err(DecodeError::InvalidChar);
     }
     let mut chunks = input.chunks_exact(8);
-    while let Some(chunk) = chunks.next() {
+    for chunk in chunks.by_ref() {
         let a = char_index(chunk[0]);
         let b = char_index(chunk[1]);
         let c = char_index(chunk[2]);
@@ -110,11 +157,11 @@ pub fn decode<O: Write + ?Sized>(input: &[u8], output: &mut O) -> Result<(), Dec
         let f = char_index(chunk[5]);
         let g = char_index(chunk[6]);
         let h = char_index(chunk[7]);
-        output.push(a | ((b & 0b111) << 5)); // 5 + 3 bits
-        output.push((b >> 3) | (c << 2) | ((d & 0b1) << 7)); // 2 + 5 + 1 bits
-        output.push((d >> 1) | ((e & 0b1111) << 4)); // 4 + 4 bits
-        output.push((e >> 4) | (f << 1) | ((g & 0b11) << 6)); // 1 + 5 + 2 bits
-        output.push((g >> 2) | (h << 3)); // 3 + 5 bits
+        output.push(byte!(0, a, b)); // 5 + 3 bits
+        output.push(byte!(1, b, c, d)); // 2 + 5 + 1 bits
+        output.push(byte!(2, d, e)); // 4 + 4 bits
+        output.push(byte!(3, e, f, g)); // 1 + 5 + 2 bits
+        output.push(byte!(4, g, h)); // 3 + 5 bits
     }
     let remainder = chunks.remainder();
     let remaining = remainder.len();
@@ -123,30 +170,29 @@ pub fn decode<O: Write + ?Sized>(input: &[u8], output: &mut O) -> Result<(), Dec
     }
     let a = char_index(remainder[0]);
     let b = remainder.get(1).copied().map(char_index).unwrap_or(0);
-    output.push(a | ((b & 0b111) << 5)); // 5 + 3 bits
+    output.push(byte!(0, a, b)); // 5 + 3 bits
     if remaining == 1 || remaining == 2 {
         return Ok(());
     }
     let c = remainder.get(2).copied().map(char_index).unwrap_or(0);
     let d = remainder.get(3).copied().map(char_index).unwrap_or(0);
-    output.push((b >> 3) | (c << 2) | ((d & 0b1) << 7)); // 2 + 5 + 1 bits
+    output.push(byte!(1, b, c, d)); // 2 + 5 + 1 bits
     if remaining == 3 || remaining == 4 {
         return Ok(());
     }
     let e = remainder.get(4).copied().map(char_index).unwrap_or(0);
-    output.push((d >> 1) | ((e & 0b1111) << 4)); // 4 + 4 bits
+    output.push(byte!(2, d, e)); // 4 + 4 bits
     if remaining == 5 {
         return Ok(());
     }
     let f = remainder.get(5).copied().map(char_index).unwrap_or(0);
     let g = remainder.get(6).copied().map(char_index).unwrap_or(0);
-    output.push((e >> 4) | (f << 1) | ((g & 0b11) << 6)); // 1 + 5 + 2 bits
+    output.push(byte!(3, e, f, g)); // 1 + 5 + 2 bits
     Ok(())
 }
 
 #[derive(Debug)]
 pub enum DecodeError {
-    OutputTooSmall,
     InvalidLen,
     InvalidChar,
 }
@@ -326,6 +372,63 @@ mod tests {
                 decoded,
                 "input = {input:?}, encoded = {:?}, decoded = {decoded:?}",
                 core::str::from_utf8(&encoded),
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_hashes() {
+        arbtest(|u| {
+            let mut hashes: Vec<[u8; 32]> = u.arbitrary()?;
+            hashes.sort_unstable();
+            hashes.dedup();
+            let mut strings = Vec::with_capacity(hashes.len());
+            for hash in hashes.iter() {
+                let mut hash_string = [0_u8; encoded_len(32)];
+                encode(&hash[..], &mut &mut hash_string[..]);
+                strings.push(hash_string);
+            }
+            strings.sort_unstable();
+            strings.dedup();
+            assert_eq!(hashes.len(), strings.len());
+            let mut actual_hashes = Vec::with_capacity(hashes.len());
+            for string in strings.iter() {
+                let mut actual_hash = [0_u8; 32];
+                decode(&string[..], &mut &mut actual_hash[..]).unwrap();
+                actual_hashes.push(actual_hash);
+            }
+            actual_hashes.sort_unstable();
+            assert_eq!(hashes, actual_hashes);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_sorting() {
+        arbtest(|u| {
+            let hash_len: usize = u.arbitrary_len::<u8>()?;
+            let mut hashes = [vec![0_u8; hash_len], vec![0_u8; hash_len]];
+            for i in 0..hash_len {
+                hashes[0][i] = u.arbitrary()?;
+                hashes[1][i] = u.arbitrary()?;
+            }
+            let expected = hashes[0].cmp(&hashes[1]);
+            let mut encoded = [
+                vec![0_u8; encoded_len(hash_len)],
+                vec![0_u8; encoded_len(hash_len)],
+            ];
+            encode(&hashes[0][..], &mut &mut encoded[0][..]);
+            encode(&hashes[1][..], &mut &mut encoded[1][..]);
+            let actual = encoded[0].cmp(&encoded[1]);
+            assert_eq!(
+                expected,
+                actual,
+                "expected = {expected:?}, actual = {actual:?}, raw = {:?} {:?}, encoded = {} {}",
+                hashes[0],
+                hashes[1],
+                core::str::from_utf8(&encoded[0]).unwrap(),
+                core::str::from_utf8(&encoded[1]).unwrap(),
             );
             Ok(())
         });

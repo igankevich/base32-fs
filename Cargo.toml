@@ -13,3 +13,8 @@ std = []
 [dev-dependencies]
 arbitrary = "1.4.1"
 arbtest = "0.3.2"
+criterion = "0.5.1"
+
+[[bench]]
+name = "encode"
+harness = false

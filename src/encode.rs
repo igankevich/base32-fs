@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
-#![allow(unused)]
+
+use crate::Write;
 
 /// Maximum number of bytes that can be encoded as BASE32.
 pub const MAX_INPUT_LEN: usize = usize::MAX / 8 * 5 + 4;
@@ -46,118 +47,100 @@ pub fn is_valid_base32(input: &[u8]) -> bool {
     decoded_len(input.len()).is_some() && input.iter().all(|b| CHARS.contains(b))
 }
 
-pub fn encode_into(input: &[u8], output: &mut [u8]) {
-    let input_len = input.len();
-    let output_len = output.len();
-    if encoded_len(input_len) > output.len() {
-        panic!("Output slice is too small");
+pub fn encode<O: Write + ?Sized>(input: &[u8], output: &mut O) {
+    let mut chunks = input.chunks_exact(5);
+    while let Some(chunk) = chunks.next() {
+        let a = chunk[0];
+        let b = chunk[1];
+        let c = chunk[2];
+        let d = chunk[3];
+        let e = chunk[4];
+        output.push(CHARS[(a & 0b11111) as usize]); // 5 bits
+        output.push(CHARS[((a >> 5) | ((b & 0b11) << 3)) as usize]); // 3 + 2 bits
+        output.push(CHARS[((b >> 2) & 0b11111) as usize]); // 5 bits
+        output.push(CHARS[((b >> 7) | ((c & 0b1111) << 1)) as usize]); // 1 + 4 bits
+        output.push(CHARS[((c >> 4) | ((d & 0b1) << 4)) as usize]); // 4 + 1 bits
+        output.push(CHARS[((d >> 1) & 0b11111) as usize]); // 5 bits
+        output.push(CHARS[((d >> 6) | ((e & 0b111) << 2)) as usize]); // 2 + 3 bits
+        output.push(CHARS[(e >> 3) as usize]); // 5 bits
     }
-    let aligned_input_len = input_len / 5 * 5;
-    let aligned_output_len = output_len / 8 * 8;
-    let input_iter = (0..aligned_input_len).step_by(5);
-    let output_iter = (0..aligned_output_len).step_by(8);
-    for (i, j) in output_iter.zip(input_iter) {
-        let a = input[j];
-        let b = input[j + 1];
-        let c = input[j + 2];
-        let d = input[j + 3];
-        let e = input[j + 4];
-        output[i] = CHARS[(a & 0b11111) as usize]; // 5 bits
-        output[i + 1] = CHARS[((a >> 5) | ((b & 0b11) << 3)) as usize]; // 3 + 2 bits
-        output[i + 2] = CHARS[((b >> 2) & 0b11111) as usize]; // 5 bits
-        output[i + 3] = CHARS[((b >> 7) | ((c & 0b1111) << 1)) as usize]; // 1 + 4 bits
-        output[i + 4] = CHARS[((c >> 4) | ((d & 0b1) << 4)) as usize]; // 4 + 1 bits
-        output[i + 5] = CHARS[((d >> 1) & 0b11111) as usize]; // 5 bits
-        output[i + 6] = CHARS[((d >> 6) | ((e & 0b111) << 2)) as usize]; // 2 + 3 bits
-        output[i + 7] = CHARS[(e >> 3) as usize]; // 5 bits
-    }
-    let remaining = input_len - aligned_input_len;
+    let remainder = chunks.remainder();
+    let remaining = remainder.len();
     if remaining == 0 {
         return;
     }
-    let i = aligned_output_len;
-    let j = aligned_input_len;
-    let a = input[j];
-    output[i] = CHARS[(a & 0b11111) as usize]; // 5 bits
-    let b = input.get(j + 1).copied().unwrap_or(0);
-    output[i + 1] = CHARS[((a >> 5) | ((b & 0b11) << 3)) as usize]; // 3 + 2 bits
+    let a = remainder[0];
+    output.push(CHARS[(a & 0b11111) as usize]); // 5 bits
+    let b = remainder.get(1).copied().unwrap_or(0);
+    output.push(CHARS[((a >> 5) | ((b & 0b11) << 3)) as usize]); // 3 + 2 bits
     if remaining == 1 {
         return;
     }
-    let c = input.get(j + 2).copied().unwrap_or(0);
-    output[i + 2] = CHARS[((b >> 2) & 0b11111) as usize]; // 5 bits
-    output[i + 3] = CHARS[((b >> 7) | ((c & 0b1111) << 1)) as usize]; // 1 + 4 bits
+    let c = remainder.get(2).copied().unwrap_or(0);
+    output.push(CHARS[((b >> 2) & 0b11111) as usize]); // 5 bits
+    output.push(CHARS[((b >> 7) | ((c & 0b1111) << 1)) as usize]); // 1 + 4 bits
     if remaining == 2 {
         return;
     }
-    let d = input.get(j + 3).copied().unwrap_or(0);
-    output[i + 4] = CHARS[((c >> 4) | ((d & 0b1) << 4)) as usize]; // 4 + 1 bits
+    let d = remainder.get(3).copied().unwrap_or(0);
+    output.push(CHARS[((c >> 4) | ((d & 0b1) << 4)) as usize]); // 4 + 1 bits
     if remaining == 3 {
         return;
     }
-    let e = input.get(j + 4).copied().unwrap_or(0);
-    output[i + 5] = CHARS[((d >> 1) & 0b11111) as usize]; // 5 bits
-    output[i + 6] = CHARS[((d >> 6) | ((e & 0b111) << 2)) as usize]; // 2 + 3 bits
+    let e = remainder.get(4).copied().unwrap_or(0);
+    output.push(CHARS[((d >> 1) & 0b11111) as usize]); // 5 bits
+    output.push(CHARS[((d >> 6) | ((e & 0b111) << 2)) as usize]); // 2 + 3 bits
 }
 
-pub fn decode_into(input: &[u8], output: &mut [u8]) -> Result<(), DecodeError> {
+pub fn decode<O: Write + ?Sized>(input: &[u8], output: &mut O) -> Result<(), DecodeError> {
     let input_len = input.len();
-    let output_len = output.len();
-    if let Some(l) = decoded_len(input_len) {
-        if l > output.len() {
-            return Err(DecodeError::OutputTooSmall);
-        }
-    } else {
+    if decoded_len(input_len).is_none() {
         return Err(DecodeError::InvalidLen);
     }
     if !input.iter().all(|b| CHARS.contains(b)) {
         return Err(DecodeError::InvalidChar);
     }
-    let aligned_input_len = input_len / 8 * 8;
-    let aligned_output_len = output_len / 5 * 5;
-    let input_iter = (0..aligned_input_len).step_by(8);
-    let output_iter = (0..aligned_output_len).step_by(5);
-    for (i, j) in output_iter.zip(input_iter) {
-        let a = char_index(input[j]);
-        let b = char_index(input[j + 1]);
-        let c = char_index(input[j + 2]);
-        let d = char_index(input[j + 3]);
-        let e = char_index(input[j + 4]);
-        let f = char_index(input[j + 5]);
-        let g = char_index(input[j + 6]);
-        let h = char_index(input[j + 7]);
-        output[i] = a | ((b & 0b111) << 5); // 5 + 3 bits
-        output[i + 1] = (b >> 3) | (c << 2) | ((d & 0b1) << 7); // 2 + 5 + 1 bits
-        output[i + 2] = (d >> 1) | ((e & 0b1111) << 4); // 4 + 4 bits
-        output[i + 3] = (e >> 4) | (f << 1) | ((g & 0b11) << 6); // 1 + 5 + 2 bits
-        output[i + 4] = (g >> 2) | (h << 3); // 3 + 5 bits
+    let mut chunks = input.chunks_exact(8);
+    while let Some(chunk) = chunks.next() {
+        let a = char_index(chunk[0]);
+        let b = char_index(chunk[1]);
+        let c = char_index(chunk[2]);
+        let d = char_index(chunk[3]);
+        let e = char_index(chunk[4]);
+        let f = char_index(chunk[5]);
+        let g = char_index(chunk[6]);
+        let h = char_index(chunk[7]);
+        output.push(a | ((b & 0b111) << 5)); // 5 + 3 bits
+        output.push((b >> 3) | (c << 2) | ((d & 0b1) << 7)); // 2 + 5 + 1 bits
+        output.push((d >> 1) | ((e & 0b1111) << 4)); // 4 + 4 bits
+        output.push((e >> 4) | (f << 1) | ((g & 0b11) << 6)); // 1 + 5 + 2 bits
+        output.push((g >> 2) | (h << 3)); // 3 + 5 bits
     }
-    let remaining = input_len - aligned_input_len;
+    let remainder = chunks.remainder();
+    let remaining = remainder.len();
     if remaining == 0 {
         return Ok(());
     }
-    let i = aligned_output_len;
-    let j = aligned_input_len;
-    let a = char_index(input[j]);
-    let b = input.get(j + 1).copied().map(char_index).unwrap_or(0);
-    output[i] = a | ((b & 0b111) << 5); // 5 + 3 bits
+    let a = char_index(remainder[0]);
+    let b = remainder.get(1).copied().map(char_index).unwrap_or(0);
+    output.push(a | ((b & 0b111) << 5)); // 5 + 3 bits
     if remaining == 1 || remaining == 2 {
         return Ok(());
     }
-    let c = input.get(j + 2).copied().map(char_index).unwrap_or(0);
-    let d = input.get(j + 3).copied().map(char_index).unwrap_or(0);
-    output[i + 1] = (b >> 3) | (c << 2) | ((d & 0b1) << 7); // 2 + 5 + 1 bits
+    let c = remainder.get(2).copied().map(char_index).unwrap_or(0);
+    let d = remainder.get(3).copied().map(char_index).unwrap_or(0);
+    output.push((b >> 3) | (c << 2) | ((d & 0b1) << 7)); // 2 + 5 + 1 bits
     if remaining == 3 || remaining == 4 {
         return Ok(());
     }
-    let e = input.get(j + 4).copied().map(char_index).unwrap_or(0);
-    output[i + 2] = (d >> 1) | ((e & 0b1111) << 4); // 4 + 4 bits
+    let e = remainder.get(4).copied().map(char_index).unwrap_or(0);
+    output.push((d >> 1) | ((e & 0b1111) << 4)); // 4 + 4 bits
     if remaining == 5 {
         return Ok(());
     }
-    let f = input.get(j + 5).copied().map(char_index).unwrap_or(0);
-    let g = input.get(j + 6).copied().map(char_index).unwrap_or(0);
-    output[i + 3] = (e >> 4) | (f << 1) | ((g & 0b11) << 6); // 1 + 5 + 2 bits
+    let f = remainder.get(5).copied().map(char_index).unwrap_or(0);
+    let g = remainder.get(6).copied().map(char_index).unwrap_or(0);
+    output.push((e >> 4) | (f << 1) | ((g & 0b11) << 6)); // 1 + 5 + 2 bits
     Ok(())
 }
 
@@ -225,9 +208,9 @@ mod tests {
     fn test_encode() {
         let input = *b"hello";
         let mut output = [b'_'; encoded_len(5)];
-        encode_into(&input, &mut output[..]);
+        encode(&input, &mut &mut output[..]);
         let mut decoded = [b'_'; 5];
-        decode_into(&output, &mut decoded).unwrap();
+        decode(&output, &mut &mut decoded[..]).unwrap();
         assert_eq!(input, decoded);
     }
 
@@ -239,16 +222,16 @@ mod tests {
             for _ in 0..input_len {
                 input.push(u.arbitrary()?);
             }
-            let mut encoded = vec![b'_'; encoded_len(input.len())];
-            encode_into(&input, &mut encoded);
+            let mut encoded = Vec::with_capacity(encoded_len(input.len()));
+            encode(&input, &mut encoded);
             assert!(
                 !encoded.contains(&b'_'),
                 "input = {:?}, encoded = {:?}",
                 input,
                 core::str::from_utf8(&encoded)
             );
-            let mut decoded = vec![0_u8; decoded_len(encoded.len()).unwrap()];
-            decode_into(&encoded, &mut decoded).unwrap();
+            let mut decoded = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
+            decode(&encoded, &mut decoded).unwrap();
             assert_eq!(input, decoded);
             Ok(())
         });
@@ -262,16 +245,16 @@ mod tests {
             for _ in 0..input_len {
                 input.push(u.arbitrary()?);
             }
-            let mut encoded = vec![b'_'; encoded_len(input.len())];
-            encode_into(&input, &mut encoded);
+            let mut encoded = Vec::with_capacity(encoded_len(input.len()));
+            encode(&input, &mut encoded);
             assert!(
                 !encoded.contains(&b'_'),
                 "input = {:?}, encoded = {:?}",
                 input,
                 core::str::from_utf8(&encoded)
             );
-            let mut decoded = vec![0_u8; decoded_len(encoded.len()).unwrap()];
-            decode_into(&encoded, &mut decoded).unwrap();
+            let mut decoded = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
+            decode(&encoded, &mut decoded).unwrap();
             assert_eq!(
                 input,
                 decoded,
@@ -286,16 +269,16 @@ mod tests {
     fn test_any_len() {
         arbtest(|u| {
             let input: Vec<u8> = u.arbitrary()?;
-            let mut encoded = vec![b'_'; encoded_len(input.len())];
-            encode_into(&input, &mut encoded);
+            let mut encoded = Vec::with_capacity(encoded_len(input.len()));
+            encode(&input, &mut encoded);
             assert!(
                 !encoded.contains(&b'_'),
                 "input = {:?}, encoded = {:?}",
                 input,
                 core::str::from_utf8(&encoded)
             );
-            let mut decoded = vec![0_u8; decoded_len(encoded.len()).unwrap()];
-            decode_into(&encoded, &mut decoded).unwrap();
+            let mut decoded = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
+            decode(&encoded, &mut decoded).unwrap();
             assert_eq!(
                 input,
                 decoded,
@@ -317,8 +300,8 @@ mod tests {
             for _ in 0..input_len {
                 input.push(*u.choose(&CHARS)?);
             }
-            let mut decoded = vec![0_u8; output_len];
-            decode_into(&input, &mut decoded).unwrap();
+            let mut decoded: Vec<u8> = Vec::with_capacity(output_len);
+            decode(&input, &mut decoded).unwrap();
             Ok(())
         });
     }
@@ -328,16 +311,16 @@ mod tests {
         arbtest(|u| {
             let input_len: usize = u.arbitrary_len::<u8>()?;
             let input = vec![0_u8; input_len];
-            let mut encoded = vec![b'_'; encoded_len(input.len())];
-            encode_into(&input, &mut encoded);
+            let mut encoded = Vec::with_capacity(encoded_len(input.len()));
+            encode(&input, &mut encoded);
             assert!(
                 !encoded.contains(&b'_'),
                 "input = {:?}, encoded = {:?}",
                 input,
                 core::str::from_utf8(&encoded)
             );
-            let mut decoded = vec![0_u8; decoded_len(encoded.len()).unwrap()];
-            decode_into(&encoded, &mut decoded).unwrap();
+            let mut decoded = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
+            decode(&encoded, &mut decoded).unwrap();
             assert_eq!(
                 input,
                 decoded,

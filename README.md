@@ -1,11 +1,11 @@
-# basis32
+# base32-fs
 
-[![Crates.io Version](https://img.shields.io/crates/v/basis32)](https://crates.io/crates/basis32)
-[![Docs](https://docs.rs/basis32/badge.svg)](https://docs.rs/basis32)
-[![dependency status](https://deps.rs/repo/github/igankevich/basis32/status.svg)](https://deps.rs/repo/github/igankevich/basis32)
+[![Crates.io Version](https://img.shields.io/crates/v/base32-fs)](https://crates.io/base32-fs/base32-fs)
+[![Docs](https://docs.rs/base32-fs/badge.svg)](https://docs.rs/base32-fs)
+[![dependency status](https://deps.rs/repo/github/igankevich/base32-fs/status.svg)](https://deps.rs/repo/github/igankevich/base32-fs)
 
-This crate implements modified BASE32 encoding that is useful for using encoded file hashes as file names:
-no two encoded file hashes can be decoded to the same original hash unless there is a hash collision.
+This crate implements modified BASE32 encoding for hashes that are used as file names:
+no two encoded hashes can be decoded to the same original hash unless there is a hash collision.
 
 To achieve that the crate
 - uses the same characters when encoding and decoding the data
@@ -16,3 +16,32 @@ Besides that the crate
 - uses only lowercase letters instead of uppercase as the most common representation of hashes;
 - doesn't use padding characters;
 - doesn't change the sorting order of the encoded data.
+
+
+## Usage
+
+
+### Encode into `PathBuf`
+
+```rust
+use std::path::PathBuf;
+use base32_fs::{encode, encoded_len, PathBufOutput};
+
+let input = *b"hello";
+let mut output = PathBufOutput::with_capacity(encoded_len(input.len()));
+encode(&input, &mut output);
+assert_eq!(PathBuf::from("d1jprv3f"), output.into_path_buf());
+```
+
+
+### Decode from `PathBuf`
+
+```rust
+use std::path::Path;
+use base32_fs::{decode, decoded_len, PathBufInput};
+
+let input = PathBufInput::new(Path::new("d1jprv3f"));
+let mut output: Vec<u8> = Vec::new();
+decode(input, &mut output);
+assert_eq!(b"hello", output.as_slice());
+```

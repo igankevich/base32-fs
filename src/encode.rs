@@ -100,9 +100,9 @@ mod tests {
     use alloc::vec;
     use alloc::vec::Vec;
     use arbtest::arbtest;
-    
-    use crate::decoded_len;
+
     use crate::decode;
+    use crate::decoded_len;
 
     #[test]
     fn test_encoded_len() {

@@ -1,7 +1,16 @@
 [package]
-name = "basis32"
+name = "base32-fs"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+homepage = "https://github.com/igankevich/base32-fs"
+repository = "https://github.com/igankevich/base32-fs"
+documentation = "https://docs.rs/base32-fs"
+readme = "README.md"
+description = "A modified BASE32 encoding for hashes that are used as file names"
+keywords = ["base32", "crockford", "fs"]
+categories = ["encoding", "filesystem", "no-std"]
+include = ["**/*.rs", "Cargo.toml", "README.md", "LICENSE"]
 
 [features]
 default = ["alloc", "std"]

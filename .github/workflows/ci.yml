@@ -42,4 +42,4 @@ jobs:
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: cargo publish --quiet --package base32-fs
+        run: ./ci/publish.sh

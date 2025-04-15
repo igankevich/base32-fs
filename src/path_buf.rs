@@ -6,26 +6,6 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::path::PathBuf;
 
-#[cfg(unix)]
-mod unix {
-    pub use std::os::unix::ffi::OsStrExt;
-    pub use std::os::unix::ffi::OsStringExt;
-}
-
-#[cfg(unix)]
-use self::unix::*;
-
-#[cfg(windows)]
-mod windows {
-    pub use crate::ReadIter;
-    pub use std::os::windows::ffi::EncodeWide;
-    pub use std::os::windows::ffi::OsStrExt;
-    pub use std::os::windows::ffi::OsStringExt;
-}
-
-#[cfg(windows)]
-use self::windows::*;
-
 /// An implementation of [`Output`](crate::Output) for file system paths.
 ///
 /// Works on both Unix-like and Windows platforms.
@@ -108,7 +88,7 @@ pub struct PathBufInput<'a> {
     #[cfg(unix)]
     inner: &'a [u8],
     #[cfg(windows)]
-    inner: ReadIter<EncodeWide<'a>, u16, 8>,
+    inner: WideCharIter<'a>,
 }
 
 impl<'a> PathBufInput<'a> {
@@ -117,7 +97,7 @@ impl<'a> PathBufInput<'a> {
         #[cfg(unix)]
         let inner = path.as_os_str().as_bytes();
         #[cfg(windows)]
-        let inner = ReadIter::new(path.as_os_str().encode_wide());
+        let inner = WideCharIter::new(path.as_os_str().encode_wide());
         Self { inner }
     }
 }
@@ -137,3 +117,60 @@ impl Input<8> for PathBufInput<'_> {
         Input::<8>::remainder(&self.inner)
     }
 }
+
+#[cfg(unix)]
+mod unix {
+    pub use std::os::unix::ffi::OsStrExt;
+    pub use std::os::unix::ffi::OsStringExt;
+}
+
+#[cfg(unix)]
+use self::unix::*;
+
+#[cfg(windows)]
+mod windows {
+    use crate::Input;
+
+    pub use std::os::windows::ffi::EncodeWide;
+    pub use std::os::windows::ffi::OsStrExt;
+    pub use std::os::windows::ffi::OsStringExt;
+
+    pub struct WideCharIter<'a> {
+        iter: EncodeWide<'a>,
+        chunk: [u8; 8],
+        remainder_len: usize,
+    }
+
+    impl<'a> WideCharIter<'a> {
+        pub fn new(iter: EncodeWide<'a>) -> Self {
+            Self {
+                iter,
+                chunk: [0; 8],
+                remainder_len: 0,
+            }
+        }
+    }
+
+    impl<'a> Input<8> for WideCharIter<'a> {
+        fn next_chunk(&mut self) -> Option<&[u8]> {
+            for i in 0..8 {
+                match self.iter.next() {
+                    // Map to an invalid character to trigger an error.
+                    Some(x) => self.chunk[i] = x.try_into().unwrap_or(u8::MAX),
+                    None => {
+                        self.remainder_len = i;
+                        return None;
+                    }
+                }
+            }
+            Some(&self.chunk[..])
+        }
+
+        fn remainder(&self) -> &[u8] {
+            &self.chunk[..self.remainder_len]
+        }
+    }
+}
+
+#[cfg(windows)]
+use self::windows::*;

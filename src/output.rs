@@ -16,6 +16,7 @@ impl<T: From<u8>> Output for &mut [T] {
 }
 
 #[cfg(feature = "alloc")]
+#[cfg_attr(any(docsrs), doc(cfg(feature = "alloc")))]
 impl<T: From<u8>> Output for alloc::vec::Vec<T> {
     fn push(&mut self, ch: u8) {
         alloc::vec::Vec::<T>::push(self, ch.into());

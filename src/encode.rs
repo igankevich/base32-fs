@@ -1,6 +1,5 @@
-#![allow(missing_docs)]
-
-use crate::Write;
+use crate::Output;
+use crate::CHARS;
 
 /// Maximum number of bytes that can be encoded as BASE32.
 pub const MAX_INPUT_LEN: usize = usize::MAX / 8 * 5 + 4;
@@ -22,34 +21,9 @@ pub const fn encoded_len(input_len: usize) -> usize {
         }
 }
 
-/// Returns the length of the original byte sequence for the given BASE32-encoded string length.
-///
-/// Returns `None` if `input_len` is invalid (i.e. was not returned by
-/// [`encoded_len`](crate::encoded_len)).
-pub const fn decoded_len(input_len: usize) -> Option<usize> {
-    Some(
-        input_len / 8 * 5
-            + match input_len % 8 {
-                0 => 0,
-                1 => return None,
-                2 => 1,
-                3 => return None,
-                4 => 2,
-                5 => 3,
-                6 => return None,
-                _ => 4,
-            },
-    )
-}
-
-/// Returns `true` if the `input` is a valid BASE32-encoded string.
-pub fn is_valid_base32(input: &[u8]) -> bool {
-    decoded_len(input.len()).is_some() && input.iter().all(|b| CHARS.contains(b))
-}
-
 /// Encode `input` byte sequence using BASE32 encoding and write the resulting byte sequence to
 /// `output`.
-pub fn encode<O: Write + ?Sized>(input: &[u8], output: &mut O) {
+pub fn encode<O: Output + ?Sized>(input: &[u8], output: &mut O) {
     macro_rules! byte {
         (0, $a: ident) => {
             CHARS[($a >> 3) as usize]
@@ -120,118 +94,15 @@ pub fn encode<O: Write + ?Sized>(input: &[u8], output: &mut O) {
     output.push(byte!(6, d, e)); // 2 + 3 bits
 }
 
-/// Decode `input` byte sequence using BASE32 encoding and write the resulting byte sequence to
-/// `output`.
-pub fn decode<O: Write + ?Sized>(input: &[u8], output: &mut O) -> Result<(), DecodeError> {
-    macro_rules! byte {
-        (0, $a: ident, $b: ident) => {
-            ($a << 3) | (($b >> 2) & 0b111)
-        };
-        (1, $b: ident, $c: ident, $d: ident) => {
-            (($b & 0b11) << 6) | ($c << 1) | ($d >> 4)
-        };
-        (2, $d: ident, $e: ident) => {
-            (($d & 0b1111) << 4) | ($e >> 1)
-        };
-        (3, $e: ident, $f: ident, $g: ident) => {
-            (($e & 0b1) << 7) | ($f << 2) | ($g >> 3)
-        };
-        (4, $g: ident, $h: ident) => {
-            (($g & 0b111) << 5) | $h
-        };
-    }
-    let input_len = input.len();
-    if decoded_len(input_len).is_none() {
-        return Err(DecodeError::InvalidLen);
-    }
-    if !input.iter().all(|b| CHARS.contains(b)) {
-        return Err(DecodeError::InvalidChar);
-    }
-    let mut chunks = input.chunks_exact(8);
-    for chunk in chunks.by_ref() {
-        let a = char_index(chunk[0]);
-        let b = char_index(chunk[1]);
-        let c = char_index(chunk[2]);
-        let d = char_index(chunk[3]);
-        let e = char_index(chunk[4]);
-        let f = char_index(chunk[5]);
-        let g = char_index(chunk[6]);
-        let h = char_index(chunk[7]);
-        output.push(byte!(0, a, b)); // 5 + 3 bits
-        output.push(byte!(1, b, c, d)); // 2 + 5 + 1 bits
-        output.push(byte!(2, d, e)); // 4 + 4 bits
-        output.push(byte!(3, e, f, g)); // 1 + 5 + 2 bits
-        output.push(byte!(4, g, h)); // 3 + 5 bits
-    }
-    let remainder = chunks.remainder();
-    let remaining = remainder.len();
-    if remaining == 0 {
-        return Ok(());
-    }
-    let a = char_index(remainder[0]);
-    let b = remainder.get(1).copied().map(char_index).unwrap_or(0);
-    output.push(byte!(0, a, b)); // 5 + 3 bits
-    if remaining == 1 || remaining == 2 {
-        return Ok(());
-    }
-    let c = remainder.get(2).copied().map(char_index).unwrap_or(0);
-    let d = remainder.get(3).copied().map(char_index).unwrap_or(0);
-    output.push(byte!(1, b, c, d)); // 2 + 5 + 1 bits
-    if remaining == 3 || remaining == 4 {
-        return Ok(());
-    }
-    let e = remainder.get(4).copied().map(char_index).unwrap_or(0);
-    output.push(byte!(2, d, e)); // 4 + 4 bits
-    if remaining == 5 {
-        return Ok(());
-    }
-    let f = remainder.get(5).copied().map(char_index).unwrap_or(0);
-    let g = remainder.get(6).copied().map(char_index).unwrap_or(0);
-    output.push(byte!(3, e, f, g)); // 1 + 5 + 2 bits
-    Ok(())
-}
-
-#[derive(Debug)]
-pub enum DecodeError {
-    InvalidLen,
-    InvalidChar,
-}
-
-const fn char_index(ch: u8) -> u8 {
-    let i = (ch >> 6) & 1;
-    let j = (ch & 0b0011_1111) - 33;
-    INDICES[i as usize][j as usize]
-}
-
-// Crockford's base32.
-const CHARS: [u8; 32] = *b"0123456789abcdefghjkmnpqrstvwxyz";
-
-const INDICES: [[u8; 26]; 2] = [
-    [
-        NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-        NA,
-    ],
-    [
-        10, 11, 12, 13, 14, 15, 16, 17, NA, 18, 19, NA, 20, 21, NA, 22, 23, 24, 25, 26, NA, 27, 28,
-        29, 30, 31,
-    ],
-];
-
-const NA: u8 = 32;
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use alloc::vec;
     use alloc::vec::Vec;
     use arbtest::arbtest;
-
-    #[test]
-    fn test_indices() {
-        for (i, ch) in CHARS.iter().enumerate() {
-            assert_eq!(i, char_index(*ch) as usize);
-        }
-    }
+    
+    use crate::decoded_len;
+    use crate::decode;
 
     #[test]
     fn test_encoded_len() {
@@ -242,6 +113,11 @@ mod tests {
             assert_eq!(input_len, dec_len);
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_encoded_len_no_panic() {
+        let _enc_len = encoded_len(MAX_INPUT_LEN);
     }
 
     #[test]
@@ -256,7 +132,7 @@ mod tests {
         let mut output = [b'_'; encoded_len(5)];
         encode(&input, &mut &mut output[..]);
         let mut decoded = [b'_'; 5];
-        decode(&output, &mut &mut decoded[..]).unwrap();
+        decode(output.as_slice(), &mut &mut decoded[..]).unwrap();
         assert_eq!(input, decoded);
     }
 
@@ -276,8 +152,8 @@ mod tests {
                 input,
                 core::str::from_utf8(&encoded)
             );
-            let mut decoded = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
-            decode(&encoded, &mut decoded).unwrap();
+            let mut decoded: Vec<u8> = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
+            decode(encoded.as_slice(), &mut decoded).unwrap();
             assert_eq!(input, decoded);
             Ok(())
         });
@@ -299,8 +175,8 @@ mod tests {
                 input,
                 core::str::from_utf8(&encoded)
             );
-            let mut decoded = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
-            decode(&encoded, &mut decoded).unwrap();
+            let mut decoded: Vec<u8> = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
+            decode(encoded.as_slice(), &mut decoded).unwrap();
             assert_eq!(
                 input,
                 decoded,
@@ -323,8 +199,8 @@ mod tests {
                 input,
                 core::str::from_utf8(&encoded)
             );
-            let mut decoded = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
-            decode(&encoded, &mut decoded).unwrap();
+            let mut decoded: Vec<u8> = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
+            decode(encoded.as_slice(), &mut decoded).unwrap();
             assert_eq!(
                 input,
                 decoded,
@@ -347,7 +223,7 @@ mod tests {
                 input.push(*u.choose(&CHARS)?);
             }
             let mut decoded: Vec<u8> = Vec::with_capacity(output_len);
-            decode(&input, &mut decoded).unwrap();
+            decode(input.as_slice(), &mut decoded).unwrap();
             Ok(())
         });
     }
@@ -365,8 +241,8 @@ mod tests {
                 input,
                 core::str::from_utf8(&encoded)
             );
-            let mut decoded = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
-            decode(&encoded, &mut decoded).unwrap();
+            let mut decoded: Vec<u8> = Vec::with_capacity(decoded_len(encoded.len()).unwrap());
+            decode(encoded.as_slice(), &mut decoded).unwrap();
             assert_eq!(
                 input,
                 decoded,

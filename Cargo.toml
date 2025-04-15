@@ -18,3 +18,20 @@ criterion = "0.5.1"
 [[bench]]
 name = "encode"
 harness = false
+
+[lints.clippy]
+unwrap_used = "deny"
+missing_safety_doc = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[lints.rust]
+missing_docs = "warn"
+
+[package.metadata.docs.rs]
+all-features = true
+default-target = "x86_64-unknown-linux-gnu"
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu"
+]

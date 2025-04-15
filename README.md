@@ -1,5 +1,9 @@
 # basis32
 
+[![Crates.io Version](https://img.shields.io/crates/v/basis32)](https://crates.io/crates/basis32)
+[![Docs](https://docs.rs/basis32/badge.svg)](https://docs.rs/basis32)
+[![dependency status](https://deps.rs/repo/github/igankevich/basis32/status.svg)](https://deps.rs/repo/github/igankevich/basis32)
+
 This crate implements modified BASE32 encoding that is useful for using encoded file hashes as file names:
 no two encoded file hashes can be decoded to the same original hash unless there is a hash collision.
 

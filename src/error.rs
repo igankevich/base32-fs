@@ -5,7 +5,6 @@
 pub struct DecodeError;
 
 #[cfg(feature = "std")]
-#[cfg_attr(any(docsrs), doc(cfg(feature = "std")))]
 impl std::error::Error for DecodeError {}
 
 impl core::fmt::Display for DecodeError {

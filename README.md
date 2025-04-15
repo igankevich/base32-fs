@@ -4,7 +4,7 @@
 [![Docs](https://docs.rs/base32-fs/badge.svg)](https://docs.rs/base32-fs)
 [![dependency status](https://deps.rs/repo/github/igankevich/base32-fs/status.svg)](https://deps.rs/repo/github/igankevich/base32-fs)
 
-This crate implements modified BASE32 encoding for hashes that are used as file names:
+This crate implements a variant of BASE32 encoding for hashes that are used as file names:
 no two encoded hashes can be decoded to the same original hash unless there is a hash collision.
 
 To achieve that the crate

@@ -45,3 +45,29 @@ let mut output: Vec<u8> = Vec::new();
 decode(input, &mut output);
 assert_eq!(b"hello", output.as_slice());
 ```
+
+
+### Encode into `Vec<u8>`
+
+```rust
+use base32_fs::{encode, encoded_len};
+
+let input = *b"hello";
+let mut output: Vec<u8> = Vec::with_capacity(encoded_len(input.len()));
+encode(&input, &mut output);
+let string = std::str::from_utf8(output.as_slice()).expect("Always a valid UTF-8 byte sequence");
+assert_eq!("d1jprv3f", string);
+```
+
+
+### Decode from `&[u8]`
+
+```rust
+use std::path::Path;
+use base32_fs::{decode, decoded_len, PathBufInput};
+
+let input = b"d1jprv3f";
+let mut output: Vec<u8> = Vec::with_capacity(decoded_len(input.len()).unwrap());
+decode(input.as_slice(), &mut output);
+assert_eq!(b"hello", output.as_slice());
+```

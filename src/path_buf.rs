@@ -3,16 +3,28 @@ use crate::Output;
 
 use alloc::vec::Vec;
 use std::ffi::OsString;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStringExt;
-#[cfg(windows)]
-use std::os::windows::ffi::EncodeWide;
-#[cfg(windows)]
-use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
+
+#[cfg(unix)]
+mod unix {
+    pub use std::os::unix::ffi::OsStrExt;
+    pub use std::os::unix::ffi::OsStringExt;
+}
+
+#[cfg(unix)]
+use self::unix::*;
+
+#[cfg(windows)]
+mod windows {
+    pub use crate::ReadIter;
+    pub use std::os::windows::ffi::EncodeWide;
+    pub use std::os::windows::ffi::OsStrExt;
+    pub use std::os::windows::ffi::OsStringExt;
+}
+
+#[cfg(windows)]
+use self::windows::*;
 
 /// An implementation of [`Output`](crate::Output) for file system paths.
 ///
@@ -96,7 +108,7 @@ pub struct PathBufInput<'a> {
     #[cfg(unix)]
     inner: &'a [u8],
     #[cfg(windows)]
-    inner: EncodeWide<'a>,
+    inner: ReadIter<EncodeWide<'a>, u16, 8>,
 }
 
 impl<'a> PathBufInput<'a> {
@@ -105,7 +117,7 @@ impl<'a> PathBufInput<'a> {
         #[cfg(unix)]
         let inner = path.as_os_str().as_bytes();
         #[cfg(windows)]
-        let inner = path.as_os_str().encode_wide();
+        let inner = ReadIter::new(path.as_os_str().encode_wide());
         Self { inner }
     }
 }
@@ -116,12 +128,12 @@ impl<'a> From<&'a Path> for PathBufInput<'a> {
     }
 }
 
-impl<const N: usize> Input<N> for PathBufInput<'_> {
+impl Input<8> for PathBufInput<'_> {
     fn next_chunk(&mut self) -> Option<&[u8]> {
-        Input::<N>::next_chunk(&mut self.inner)
+        Input::<8>::next_chunk(&mut self.inner)
     }
 
     fn remainder(&self) -> &[u8] {
-        Input::<N>::remainder(&self.inner)
+        Input::<8>::remainder(&self.inner)
     }
 }

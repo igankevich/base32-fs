@@ -15,7 +15,8 @@ To achieve that the crate
 Besides that the crate
 - uses only lowercase letters instead of uppercase as the most common representation of hashes;
 - doesn't use padding characters;
-- doesn't change the sorting order of the encoded data.
+- doesn't change the sorting order of the encoded data;
+- doesn't use lookup table when decoding.
 
 
 ## Usage

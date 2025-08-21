@@ -3,12 +3,22 @@ pub(crate) const CHARS: [u8; 32] = *b"0123456789abcdefghjkmnpqrstvwxyz";
 
 #[inline]
 pub(crate) const fn char_index(ch: u8) -> u8 {
-    // This is an attempt at compressing the range '1'..='z' to a smaller range that fits into a
-    // cache line (64 bytes). To achieve that we nullify 6th bit and choose a range based on the
-    // value of this bit.
+    // Here we choose a range based on the value of the 6th bit.
     let i = (ch >> 6) & 1;
-    let j = (ch & 0b0011_1111) - 33;
-    INDICES[i as usize][j as usize]
+    if i == 0 {
+        // Range '0'..='9'.
+        ch - b'0'
+    } else {
+        // Range 'a'..='z'.
+        let correction = match ch {
+            ..b'i' => 23,
+            b'i'..b'l' => 24,
+            b'l'..b'o' => 25,
+            b'o'..b'u' => 26,
+            b'u'.. => 27,
+        };
+        (ch & 0b111_111) - correction
+    }
 }
 
 #[inline]
@@ -22,27 +32,20 @@ pub(crate) const fn is_valid_char(b: u8) -> bool {
     true
 }
 
-const INDICES: [[u8; 26]; 2] = [
-    [
-        NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-        NA,
-    ],
-    [
-        10, 11, 12, 13, 14, 15, 16, 17, NA, 18, 19, NA, 20, 21, NA, 22, 23, 24, 25, 26, NA, 27, 28,
-        29, 30, 31,
-    ],
-];
-
-const NA: u8 = 32;
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::panic::catch_unwind;
 
     #[test]
     fn test_indices() {
-        for (i, ch) in CHARS.iter().enumerate() {
-            assert_eq!(i, char_index(*ch) as usize);
+        for (i, ch) in CHARS.iter().copied().enumerate() {
+            let result = catch_unwind(|| assert_eq!(i, char_index(ch) as usize));
+            assert!(
+                result.is_ok(),
+                "Panic context: i={i}, ch={:?}",
+                char::from(ch)
+            );
         }
     }
 }

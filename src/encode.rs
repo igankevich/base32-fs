@@ -7,6 +7,7 @@ pub const MAX_INPUT_LEN: usize = usize::MAX / 8 * 5 + 4;
 /// Returns the length of the BASE32-encoded string for the given input length.
 ///
 /// Panics if `input_len` is greater than [`MAX_INPUT_LEN`](crate::MAX_INPUT_LEN).
+#[inline]
 pub const fn encoded_len(input_len: usize) -> usize {
     if input_len > MAX_INPUT_LEN {
         panic!("The input is too large");
@@ -17,7 +18,8 @@ pub const fn encoded_len(input_len: usize) -> usize {
             1 => 2,
             2 => 4,
             3 => 5,
-            _ => 7,
+            4 => 7,
+            _ => unreachable!(),
         }
 }
 

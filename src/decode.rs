@@ -80,16 +80,17 @@ pub fn decode<I: Input<8>, O: Output + ?Sized>(
 ///
 /// Returns `None` if `input_len` is invalid (i.e. was not returned by
 /// [`encoded_len`](crate::encoded_len)).
+#[inline]
 pub const fn decoded_len(input_len: usize) -> Option<usize> {
-    match remainder_decoded_len(input_len % 8) {
+    match remainder_decoded_len(input_len) {
         Some(remainder_len) => Some(input_len / 8 * 5 + remainder_len),
         None => None,
     }
 }
 
-const fn remainder_decoded_len(remainder_len: usize) -> Option<usize> {
-    debug_assert!(remainder_len < 8);
-    match remainder_len {
+#[inline]
+const fn remainder_decoded_len(input_len: usize) -> Option<usize> {
+    match input_len % 8 {
         0 => Some(0),
         1 => None,
         2 => Some(1),
@@ -102,14 +103,23 @@ const fn remainder_decoded_len(remainder_len: usize) -> Option<usize> {
 }
 
 /// Returns `true` if the `input` is a valid BASE32-encoded string.
-pub fn is_valid(input: &[u8]) -> bool {
+#[inline]
+pub const fn is_valid(input: &[u8]) -> bool {
     decoded_len(input.len()).is_some() && is_valid_chunk(input)
 }
 
-fn is_valid_chunk(input: &[u8]) -> bool {
-    input.iter().copied().all(is_valid_char)
+#[inline]
+const fn is_valid_chunk(mut input: &[u8]) -> bool {
+    while let [ch, rest @ ..] = input {
+        if !is_valid_char(*ch) {
+            return false;
+        }
+        input = rest;
+    }
+    true
 }
 
+#[inline]
 fn is_valid_remainder(input: &[u8]) -> bool {
     is_valid_chunk(input) && remainder_decoded_len(input.len()).is_some()
 }
